@@ -1,0 +1,17 @@
+Package: misoR
+Title: Mixture of Sparse Poisson Factor Models
+Version: 0.0.1
+Authors@R: person("Dat", "Do", email = "dodat.stats@gmail.com",
+    role = c("aut", "cre"))
+Description: Fit mixtures of sparse Poisson factor models using variational
+    empirical Bayes. Combines Poisson sum-of-single-effects initialization,
+    blocked variational updates, and dictionary learning. Supports dense and
+    sparse count matrices, reusable initializations, posterior summaries,
+    and visualizations of observation-level factor loadings.
+License: file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.1.0)
+Imports: Matrix, methods, stats, graphics, grDevices, utils
+Suggests: roxygen2
+Roxygen: list(markdown = TRUE)
+Config/roxygen2/version: 8.1.0

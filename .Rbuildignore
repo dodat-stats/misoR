@@ -1,0 +1,8 @@
+^\.git$
+^\.gitignore$
+^\.Rproj\.user$
+^.*\.Rproj$
+^.*\.Rcheck$
+^.*\.tar\.gz$
+^PUBLISHING\.md$
+^DEVELOPMENT\.md$
