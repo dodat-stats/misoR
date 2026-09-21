@@ -8,6 +8,7 @@
 \description{
 Fit MiSo using \code{\link[=miso_fit]{miso_fit()}}, create reusable starting parameters with
 \code{\link[=miso_init]{miso_init()}}, and fit row-wise Poisson SuSiE with \code{\link[=poisson_susie_fit]{poisson_susie_fit()}}.
+Use \code{\link[=miso_fit_length]{miso_fit_length()}} for document-length-adjusted Poisson means.
 Observations are rows and features are columns throughout the package.
 }
 \author{

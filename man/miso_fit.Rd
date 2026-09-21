@@ -12,7 +12,6 @@ miso_fit(
   K = NULL,
   phi0 = 0.1,
   max_iters = 100,
-  mf_iters = 3,
   mixture_max_iters = 30,
   tol = 1e-05,
   min_iters = 5,
@@ -29,8 +28,9 @@ miso_fit(
 )
 }
 \arguments{
-\item{Y}{A nonnegative numeric count matrix (observations by features), dense
-or a sparse matrix from the Matrix package.}
+\item{Y}{A finite nonnegative numeric matrix (observations by features), dense
+or a sparse matrix from the Matrix package. Fractional values are allowed
+and are not rounded.}
 
 \item{F}{A nonnegative dictionary, factors by features. Rows are normalized
 internally. If omitted, use the cached dictionary or estimate one by NMF.}
@@ -49,9 +49,6 @@ when available. D is inferred from supplied parameters when omitted.}
 must have one entry per discovered motif.}
 
 \item{max_iters}{Maximum outer iterations.}
-
-\item{mf_iters}{Number of alternating gamma/F updates per outer iteration.
-Only one update is needed when either parameter is fixed.}
 
 \item{mixture_max_iters}{Maximum responsibility/Dirichlet updates per outer
 iteration; these stop at relative Dirichlet-parameter change below 1e-10.}
@@ -92,10 +89,14 @@ loadings are on the count scale. \code{pi} is the posterior mean mixture weight;
 \code{allocation_mass} is the mean responsibility across observations.
 }
 \description{
-Each outer iteration performs one Jacobi SuSiE update, alternating factor
-selection and dictionary updates using the same sufficient statistics, then
-mixture refinement and ELBO evaluation. Auxiliary allocations are computed
-in feature blocks and are never retained. Updates are undamped.
+Each outer iteration has three steps: SuSiE updates the loading posterior,
+factor selections, and loading priors; the factor step updates the dictionary
+once; the mixture step refines responsibilities and mixture proportions,
+then evaluates the ELBO. Auxiliary allocations use one Jacobi feature-block
+pass and are never retained. A second pass evaluates component bounds.
+Updates are undamped. Finite nonnegative real-valued inputs are supported
+without rounding; for fractional inputs, the same generalized Poisson
+objective is optimized.
 }
 \examples{
 set.seed(1)

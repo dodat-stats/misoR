@@ -21,6 +21,8 @@ A dense numeric matrix.
 \description{
 Prediction currently describes the observations used for fitting.
 The posterior mean loading is averaged over motif responsibilities and
-factor selections. Means are L times F. Both outputs are dense matrices,
+factor selections. Means are L times F for \code{\link[=miso_fit]{miso_fit()}}, and
+\code{n * (L \%*\% F)} for \code{\link[=miso_fit_length]{miso_fit_length()}}. Length-adjusted loadings are per
+unit of \code{n}; they are not constrained to sum to one. Both outputs are dense matrices,
 even when the input counts were sparse; no allocation array is constructed.
 }

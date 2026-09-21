@@ -156,8 +156,9 @@
 #' dictionary. A vector is treated as one observation. Results retain matrix
 #' and array dimensions even for a single observation, slot, or factor.
 #'
-#' @param Y A nonnegative numeric vector or count matrix, or a Matrix sparse
+#' @param Y A finite nonnegative numeric vector or matrix, or a Matrix sparse
 #'   vector/matrix. Matrix rows are observations and columns are features.
+#'   Fractional values are allowed and are not rounded.
 #' @param F Nonnegative factor-by-feature dictionary, normalized internally.
 #' @param D Positive integer number of factor slots per observation.
 #' @param alpha0,beta0 Positive length-D loading prior shapes and rates.

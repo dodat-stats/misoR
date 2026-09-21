@@ -5,8 +5,9 @@
 #' Supply cached Poisson-SuSiE results to change support cutoffs without refitting
 #' the observation-level models.
 #'
-#' @param Y A nonnegative numeric count matrix (observations by features), dense
-#'   or a sparse matrix from the Matrix package.
+#' @param Y A finite nonnegative numeric matrix (observations by features), dense
+#'   or a sparse matrix from the Matrix package. Fractional values are allowed
+#'   and are not rounded.
 #' @param F A nonnegative dictionary, factors by features. Rows are normalized
 #'   internally. If omitted, use the cached dictionary or estimate one by NMF.
 #' @param D Positive integer number of factor slots per motif. May be omitted

@@ -17,17 +17,17 @@ local({
     automatic = miso_fit(counts, F, D = 2, seed = 23,
                          init_control = list(susie_max_iters = 5),
                          keep_initialization = TRUE, max_iters = 4, tol = 0,
-                         update_F = TRUE, mf_iters = 2)
+                         update_F = TRUE)
     close(automatic$initialization[names(initial)], initial)
     automatic$initialization = NULL
     supplied = miso_fit(counts, init = initial, max_iters = 4, tol = 0,
-                        update_F = TRUE, mf_iters = 2)
+                        update_F = TRUE)
     supplied$call = automatic$call = NULL
     close(automatic, supplied)
     close(predict(supplied, "loadings"), .miso_expected_loadings(supplied))
     close(predict(supplied), predict(supplied, "loadings") %*% supplied$F)
     explicit = miso_fit(counts, init = initial, max_iters = 4, tol = 0,
-                        update_prior = TRUE, update_F = TRUE, mf_iters = 3)
+                        update_prior = TRUE, update_F = TRUE)
     defaults = miso_fit(counts, init = initial, max_iters = 4, tol = 0)
     explicit$call = defaults$call = NULL
     close(defaults, explicit)
@@ -50,9 +50,6 @@ local({
   }
   rejects(miso_fit(Y, F)); rejects(miso_fit(Y, D = 2))
   rejects(miso_fit(Y, F, D = 2, max_iters = 0))
-  for (bad in list(0, -1, 1.5, NA_real_, Inf, numeric())) {
-    rejects(miso_fit(Y, init = initial, mf_iters = bad))
-  }
   rejects(miso_fit(Y, init = initial, n_inner = 3))
   rejects(miso_fit(Y, init = initial, gamma_step = 0.5))
   rejects(miso_fit(Y, init = initial, F_step = 0.5))
@@ -61,6 +58,6 @@ local({
   rejects(miso_fit(Y, init = list())); rejects(miso_fit(Y, init = initial, D = 3))
   rejects(poisson_susie_fit(Y, F, D = 0)); rejects(poisson_susie_fit(Y, F[, 1:2], D = 2))
   stopifnot(setequal(getNamespaceExports("misoR"),
-                     c("miso_fit", "miso_init", "poisson_susie_fit")))
+                     c("miso_fit", "miso_fit_length", "miso_init", "poisson_susie_fit")))
 })
 cat("Public API tests passed.\n")

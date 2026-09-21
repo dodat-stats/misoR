@@ -61,7 +61,6 @@ fit = .miso_fit(
   phi0 = 0.1,
   max_iters = 15,
   min_iters = 3,
-  mf_iters = 3,
   update_F = TRUE
 )
 

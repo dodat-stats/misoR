@@ -93,19 +93,33 @@
                "Install the Matrix package to use sparse counts.")
     values = if ("x" %in% methods::slotNames(Y)) Y@x else 1
     .miso_stop(all(is.finite(values)) && all(values >= 0),
-               "Y must contain finite nonnegative counts.")
+               "Y must contain finite nonnegative values.")
     Y = methods::as(methods::as(methods::as(Y, "dMatrix"),
                                "generalMatrix"), "CsparseMatrix")
     Y = Matrix::drop0(Y)
-    .miso_stop(all(is.finite(Y@x)), "Y must contain finite counts.")
+    .miso_stop(all(is.finite(Y@x)), "Y must contain finite values.")
   } else {
     .miso_stop(is.matrix(Y) && is.numeric(Y),
                "Y must be a numeric matrix or a Matrix sparse matrix.")
     .miso_stop(all(is.finite(Y)) && all(Y >= 0),
-               "Y must contain finite nonnegative counts.")
+               "Y must contain finite nonnegative values.")
   }
   .miso_stop(all(dim(Y) > 0), "Y must have at least one row and one column.")
   Y
+}
+
+## Preserve the original S by D storage when there is no length multiplier.
+## With document lengths, rates are N by S by D, just like posterior shapes.
+.miso_posterior_rates <- function(beta0, n = NULL) {
+  if (is.null(n)) return(beta0 + 1)
+  rates = array(rep(as.vector(beta0), each = length(n)),
+                c(length(n), nrow(beta0), ncol(beta0)))
+  sweep(rates, 1, n, "+")
+}
+
+.miso_rate_matrix <- function(beta, s, N, D) {
+  if (length(dim(beta)) == 3L) return(matrix(beta[, s, ], N, D))
+  matrix(beta[s, ], N, D, byrow = TRUE)
 }
 
 .miso_row_sums <- function(Y) {

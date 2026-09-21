@@ -37,9 +37,9 @@ local({
     }
 
     dense_fit = .miso_fit(Y, F, gamma, alpha0, beta0, omega, max_iters = 5,
-                         tol = 0, update_F = TRUE, mf_iters = 3)
+                         tol = 0, update_F = TRUE)
     sparse_fit = .miso_fit(sparse, F, gamma, alpha0, beta0, omega, max_iters = 5,
-                          tol = 0, update_F = TRUE, mf_iters = 3)
+                          tol = 0, update_F = TRUE)
     dense_fit$call = sparse_fit$call = NULL
     close(sparse_fit, dense_fit, tolerance = 1e-7)
     close(predict(sparse_fit), predict(dense_fit), tolerance = 1e-7)

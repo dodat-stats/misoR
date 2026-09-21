@@ -22,7 +22,8 @@
 \item{type}{Either \code{"elbo"} or \code{"loadings"}.}
 
 \item{normalize}{Show within-observation fractions rather than absolute
-expected loading counts. Used for loading plots only.}
+expected loadings (counts for \code{\link[=miso_fit]{miso_fit()}}, per unit of \code{n} for
+\code{\link[=miso_fit_length]{miso_fit_length()}}). Used for loading plots only.}
 
 \item{cluster_order}{Optional permutation of occupied fitted cluster indices.}
 

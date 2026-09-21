@@ -38,6 +38,40 @@ Prediction currently describes fitted observations. Both prediction outputs are 
 For a runnable simulation, see `inst/examples/small-fit.R` or run
 `source(system.file("examples", "small-fit.R", package = "misoR"))`.
 
+## Fit document counts with document-length adjustment
+
+Use raw document-by-word counts, after selecting the vocabulary. Remove empty
+documents before fitting with the default `n = rowSums(Y)`.
+
+```r
+fit <- miso_fit_length(Y, K = 6, D = 2, keep_initialization = TRUE)
+# Or supply an initial dictionary: miso_fit_length(Y, F = F, D = 2)
+L <- predict(fit, "loadings")  # Contributions per unit of document length
+theta <- L / rowSums(L)        # Descriptive topic proportions
+counts <- predict(fit)        # fit$n * (L %*% fit$F)
+plot(fit, type = "loadings")
+
+# Reuse the initialization on the same counts and lengths.
+fit2 <- miso_fit_length(Y, init = fit$initialization)
+```
+
+This fits the Poisson working likelihood `Y[i,j] ~ Poisson(n[i] * (L %*% F)[i,j])`.
+The factor rows sum to one; the loading rows are unconstrained. For observed
+document lengths, the likelihood decomposes into a multinomial composition
+likelihood and a term encouraging total loadings of one. It is not the exact
+conditional sampling law given the observed total.
+
+Automatic initialization rescales row-wise Poisson-SuSiE posteriors before
+estimating shared loading priors. Do not directly pass count-scale priors from
+`miso_init()` to this function. Custom `init` priors must be per unit of `n`.
+The returned `beta` has dimensions N by S by D, while `alpha0` and `beta0`
+remain S by D. The retained posterior rates can differ from `beta0 + n`
+after an empirical-Bayes update. `elbo` omits data-only constants; add
+`fit$elbo_constant` to recover the full bound. Normalized posterior mean
+loadings are descriptive proportions, not exact posterior means of proportions.
+An explicit positive vector `n` is also accepted; unit lengths recover the
+original likelihood. See `?miso_fit_length` for details.
+
 ## Reuse initialization
 
 ```r
@@ -57,7 +91,9 @@ Cached results retain the normalized dictionary. They must refer to the same obs
 
 ## Algorithm and returned parameters
 
-Each outer iteration follows SuSiE → MF → mixture → ELBO. The SuSiE step uses one Jacobi allocation pass. The MF step alternates full gamma and F updates, reusing the sufficient statistics (`mf_iters = 3` by default). The mixture step evaluates bounds in a second feature pass, then refines responsibilities and Dirichlet parameters. No damping is used. Loading priors, gamma, and F are updated by default.
+Both `miso_fit()` and `miso_fit_length()` use the same optimization loop. Each iteration follows SuSiE → factor → mixture → ELBO. The SuSiE step uses one Jacobi allocation pass to accumulate loading counts and `C`, then updates the loading posterior, gamma, and loading priors. The factor step updates F once using `C` and the updated gamma. The mixture step evaluates bounds in a second feature pass, then refines responsibilities and Dirichlet parameters. No damping is used. Loading priors, gamma, and F are updated by default.
+
+Length adjustment changes initialization, posterior rates, and the Poisson-rate term, while retaining the same update schedule. Both fitters accept finite nonnegative real-valued matrices, including fractional entries, without rounding. For fractional data, the optimized criterion is the generalized Poisson objective.
 
 The fit is a documented list. Principal fields are:
 

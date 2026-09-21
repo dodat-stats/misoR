@@ -19,8 +19,9 @@ poisson_susie_fit(
 )
 }
 \arguments{
-\item{Y}{A nonnegative numeric vector or count matrix, or a Matrix sparse
-vector/matrix. Matrix rows are observations and columns are features.}
+\item{Y}{A finite nonnegative numeric vector or matrix, or a Matrix sparse
+vector/matrix. Matrix rows are observations and columns are features.
+Fractional values are allowed and are not rounded.}
 
 \item{F}{Nonnegative factor-by-feature dictionary, normalized internally.}
 

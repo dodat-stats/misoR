@@ -65,7 +65,8 @@ print.summary.miso_fit <- function(x, digits = 4, ...) {
 #' @param x A fitted `miso_fit` object.
 #' @param type Either `"elbo"` or `"loadings"`.
 #' @param normalize Show within-observation fractions rather than absolute
-#'   expected loading counts. Used for loading plots only.
+#'   expected loadings (counts for [miso_fit()], per unit of `n` for
+#'   [miso_fit_length()]). Used for loading plots only.
 #' @param cluster_order Optional permutation of occupied fitted cluster indices.
 #' @param factor_order Optional permutation of all fitted factor indices.
 #' @param sort_by Optional fitted factor index. Within each cluster, order bars
@@ -130,11 +131,13 @@ plot.miso_fit <- function(x, type = c("elbo", "loadings"), normalize = TRUE,
   if (is.null(labels)) labels = paste("Factor", seq_len(K))
   old_mar = graphics::par(mar = pmax(graphics::par("mar"), c(4.5, 4, 2.5, 1)))
   on.exit(graphics::par(old_mar))
+  loading_label = if (is.null(x[["n"]])) "Expected loading (counts)" else
+    "Expected loading (per unit of n)"
   midpoints = as.vector(graphics::barplot(
     t(displayed), space = gaps, border = NA, col = col[factor_order],
     axes = FALSE, axisnames = FALSE, xaxs = "i", yaxs = "i",
     ylim = c(0, 1.25 * max(1e-12, rowSums(displayed))),
-    main = main, ylab = if (normalize) "Loading fraction" else "Expected loading (counts)", ...))
+    main = main, ylab = if (normalize) "Loading fraction" else loading_label, ...))
   graphics::axis(2, at = if (normalize) seq(0, 1, 0.25) else NULL, las = 1)
   graphics::axis(1, at = (midpoints[starts] + midpoints[ends]) / 2,
     labels = paste0("C", cluster_order, "\nn=", sizes), tick = FALSE, line = -0.3, cex.axis = 0.8)

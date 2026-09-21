@@ -18,7 +18,7 @@ local({
       (a0 - 1) * (digamma(a) - log(b)) - b0 * a / b
     -entropy - log_prior
   }
-  reference_fit = function(Y, F, initial, iterations, mf_iters,
+  reference_fit = function(Y, F, initial, iterations,
                            update_prior = TRUE, update_gamma = TRUE, update_F = TRUE) {
     N = nrow(Y); M = ncol(Y); K = nrow(F)
     gamma = initial$gamma; S = dim(gamma)[1]; D = dim(gamma)[2]
@@ -46,6 +46,10 @@ local({
         for (m in seq_len(M)) C[s, d, m] = sum(omega[, s] * Y[, m] * xi[, s, d, m])
       }
       beta = beta0 + 1
+      if (update_gamma) for (s in seq_len(S)) for (d in seq_len(D)) {
+        score = vapply(seq_len(K), function(k) sum(C[s, d, ] * log(pmax(F[k, ], 1e-12))), 0.0)
+        gamma[s, d, ] = normalize(probability(score))
+      }
       if (update_prior) for (s in seq_len(S)) for (d in seq_len(D)) {
         if (sum(omega[, s]) <= 1e-12) next
         mean_lambda = sum(omega[, s] * alpha[, s, d] / beta[s, d]) / sum(omega[, s])
@@ -57,18 +61,12 @@ local({
         alpha0[s, d] = shape
         beta0[s, d] = shape / max(mean_lambda, 1e-12)
       }
-      for (r in seq_len(mf_iters)) {
-        if (update_gamma) for (s in seq_len(S)) for (d in seq_len(D)) {
-          score = vapply(seq_len(K), function(k) sum(C[s, d, ] * log(pmax(F[k, ], 1e-12))), 0.0)
-          gamma[s, d, ] = normalize(probability(score))
+      if (update_F) for (k in seq_len(K)) {
+        T = numeric(M)
+        for (m in seq_len(M)) for (s in seq_len(S)) for (d in seq_len(D)) {
+          T[m] = T[m] + gamma[s, d, k] * C[s, d, m]
         }
-        if (update_F) for (k in seq_len(K)) {
-          T = numeric(M)
-          for (m in seq_len(M)) for (s in seq_len(S)) for (d in seq_len(D)) {
-            T[m] = T[m] + gamma[s, d, k] * C[s, d, m]
-          }
-          if (sum(T) > 0) F[k, ] = normalize(T)
-        }
+        if (sum(T) > 0) F[k, ] = normalize(T)
       }
       # Explicit entropy form, independent of the production log-sum-exp bound.
       L = matrix(0, N, S)
@@ -112,11 +110,11 @@ local({
                  omega = matrix(rep(c(.9, .1), each = N), N, S))
   inputs = list(Y)
   if (requireNamespace("Matrix", quietly = TRUE)) inputs[[2]] = Matrix::Matrix(Y, sparse = TRUE)
-  for (mf_iters in c(1L, 3L)) for (iterations in c(1L, 4L)) {
-    expected = reference_fit(Y, F, initial, iterations, mf_iters)
+  for (iterations in c(1L, 4L)) {
+    expected = reference_fit(Y, F, initial, iterations)
     for (input in inputs) for (width in c(1L, 3L, M)) {
       fit = miso_fit(input, F, init = initial, max_iters = iterations,
-                     mf_iters = mf_iters, tol = 0, block_size = width)
+                     tol = 0, block_size = width)
       close(fit[names(expected)], expected)
       stopifnot(identical(fit$final_elbo, tail(fit$elbo, 1)),
                 max(abs(fit$beta - fit$beta0 - 1)) > .01,
@@ -125,20 +123,16 @@ local({
   }
   # Exercise all optional fixed-parameter combinations against the same equations.
   for (prior in c(FALSE, TRUE)) for (gamma in c(FALSE, TRUE)) for (dictionary in c(FALSE, TRUE)) {
-    expected = reference_fit(Y, F, initial, 3, 2, prior, gamma, dictionary)
+    expected = reference_fit(Y, F, initial, 3, prior, gamma, dictionary)
     for (input in inputs) {
       fit = miso_fit(input, F, init = initial, max_iters = 3, tol = 0,
-                     mf_iters = 2, update_prior = prior, update_gamma = gamma, update_F = dictionary)
+                     update_prior = prior, update_gamma = gamma, update_F = dictionary)
       close(fit[names(expected)], expected)
     }
   }
-  one = miso_fit(Y, F, init = initial, max_iters = 1, mf_iters = 1)
-  three = miso_fit(Y, F, init = initial, max_iters = 1, mf_iters = 3)
-  stopifnot(max(abs(one$F - three$F)) > 1e-5)
-
   # Count the passes, including early stopping: no hidden final refresh and
-  # no additional xi passes for extra MF repetitions. Bound passes return no counts.
-  for (input in inputs) for (learn_F in c(FALSE, TRUE)) {
+  # exactly one selection, prior, and factor update. Bound passes return no counts.
+  for (input in inputs) for (learn_F in c(FALSE, TRUE)) for (length_adjusted in c(FALSE, TRUE)) {
     exported = .miso_test_clone()
     internal = environment(exported$miso_fit)
     kernel_name = if (inherits(input, "sparseMatrix")) ".miso_sparse_pass" else ".miso_dense_pass"
@@ -151,8 +145,24 @@ local({
       if (!learn_F) stopifnot(is.null(result$C))
       result
     }
-    fit = exported$miso_fit(input, F, init = initial, max_iters = 10, mf_iters = 4,
-                             update_F = learn_F, tol = 1e6, min_iters = 2, patience = 1)
+    steps = character()
+    gamma_function = if (learn_F) ".miso_update_gamma" else ".miso_gamma_from_scores"
+    stages = c(.miso_susie_step = "allocation", .miso_update_priors = "prior",
+               .miso_update_F = "factor", .miso_component_elbo = "bound",
+               .miso_update_dirichlet = "mixture", .miso_elbo = "elbo")
+    stages[gamma_function] = "selection"
+    for (name in names(stages)) internal[[name]] = local({
+      fn = internal[[name]]; stage = stages[[name]]
+      function(...) { steps <<- c(steps, stage); fn(...) }
+    })
+    fit_args = list(Y = input, F = F, init = initial, max_iters = 10,
+                    update_F = learn_F, tol = 1e6, min_iters = 2, patience = 1)
+    fitter = if (length_adjusted) exported$miso_fit_length else exported$miso_fit
+    if (length_adjusted) fit_args$n = rep(1, N)
+    fit = do.call(fitter, fit_args)
+    expected_steps = c("allocation", "selection", "prior",
+                       if (learn_F) "factor", "bound", "mixture", "elbo")
+    stopifnot(identical(steps, rep(expected_steps, fit$n_iter)))
     stopifnot(fit$converged, fit$n_iter == 2L,
               identical(phases, rep(c(rep("susie", S), rep("mixture", S)), fit$n_iter)),
               identical(fit$final_elbo, tail(fit$elbo, 1)))

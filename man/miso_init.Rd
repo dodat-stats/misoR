@@ -23,8 +23,9 @@ miso_init(
 )
 }
 \arguments{
-\item{Y}{A nonnegative numeric count matrix (observations by features), dense
-or a sparse matrix from the Matrix package.}
+\item{Y}{A finite nonnegative numeric matrix (observations by features), dense
+or a sparse matrix from the Matrix package. Fractional values are allowed
+and are not rounded.}
 
 \item{F}{A nonnegative dictionary, factors by features. Rows are normalized
 internally. If omitted, use the cached dictionary or estimate one by NMF.}
