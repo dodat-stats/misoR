@@ -1,0 +1,106 @@
+---
+title: "Tree simulation"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Tree simulation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4)
+```
+
+## Simulate
+
+Section 6.1.1: three equally likely motifs, with supports
+$\{1,2,3\}$, $\{1,2,4\}$, and $\{1,5\}$. One seed; one $\tau_0$.
+
+```{r simulate}
+library(misoR)
+seed <- 20260918L
+tau_0 <- 0.7
+set.seed(seed)
+N <- M <- 1000L
+K <- 5L
+D <- 3L
+supports <- list(c(1, 2, 3), c(1, 2, 4), c(1, 5))
+F <- matrix(rgamma(K * M, shape = 0.1), K, M)
+F <- F / rowSums(F)
+z <- sample.int(3, N, replace = TRUE, prob = rep(1/3, 3))
+L <- matrix(0, N, K)
+for (s in 1:3) {
+  i <- which(z == s)
+  L[i, supports[[s]]] <- matrix(
+    rgamma(length(i) * length(supports[[s]]), shape = 1, rate = 1/50),
+    nrow = length(i))
+}
+Y <- Matrix::Matrix(matrix(rpois(N * M, as.vector(L %*% F)), N, M), sparse = TRUE)
+```
+
+## Fit three motifs
+
+Estimate $F$ from the counts. Reuse this NMF start for every fit.
+
+```{r initialize}
+start <- miso_init(Y, K = K, D = D, S = 6, tau = tau_0,
+                   seed = seed, nmf_max_iters = 1000)
+initialize <- function(S) miso_init(
+  Y, F = start$F, L = start$expected_loading, D = D, S = S,
+  tau = tau_0, seed = seed)
+```
+
+Fit a descending $4\to3\to2$ path; inspect its $S=3$ fit first.
+
+```{r fit-three}
+path <- miso_fit_path(Y, S = 4:2, init = initialize(4), seed = seed,
+                     warm_up_iters = 20, max_iters = 2000,
+                     tol = 1e-9, min_iters = 50, patience = 10)
+stopifnot(all(path$summary$converged))
+fit3 <- path$fits[["S3"]]
+
+# Match factor labels to truth for interpretation only.
+cosine <- (fit3$F %*% t(F)) / outer(sqrt(rowSums(fit3$F^2)), sqrt(rowSums(F^2)))
+matched <- max.col(cosine, ties.method = "first")
+stopifnot(length(unique(matched)) == K)
+rownames(fit3$F) <- paste0("F", matched)
+plot(fit3, type = "loadings", factor_order = order(matched),
+     sort_by = "dominant", main = "S = 3")
+
+L_hat <- predict(fit3, "loadings")[, order(matched)]
+profile <- rowsum(L_hat, fit3$z_hat)
+profile <- profile / rowSums(profile)
+knitr::kable(round(profile, 3), col.names = paste0("F", 1:K),
+             caption = "Loading shares within each inferred motif.")
+```
+
+F1 is shared by all motifs; F2 joins F3 or F4; F5 forms the third branch.
+The small remaining contributions are retained.
+
+## Fit six motifs
+
+```{r fit-six}
+fit6 <- miso_fit(Y, S = 6, init = start, warm_up_iters = 20,
+                 max_iters = 2000, tol = 1e-9, min_iters = 50, patience = 10)
+stopifnot(fit6$converged)
+mass <- sort(fit6$allocation_mass, decreasing = TRUE, index.return = TRUE)
+barplot(mass$x, names.arg = paste0("M", mass$ix), ylim = c(0, 0.4),
+        ylab = "Posterior membership mass", main = "S = 6", col = "steelblue")
+knitr::kable(data.frame(Motif = mass$ix, Mass = round(mass$x, 4)))
+```
+
+The three smallest motifs together receive
+`r sprintf("%.1f%%", 100 * sum(tail(mass$x, 3)))` of membership mass.
+They are small, not empty. Mass is $N^{-1}\sum_i q(Z_i=s)$.
+
+## Select the motif count
+
+Compare the same path: $K,D$ and the prior are fixed; smaller models start from merges.
+
+```{r select-S}
+plot(path)
+knitr::kable(path$summary[, c("S", "ELBO")], digits = 2)
+best_S <- path$S[which.max(path$elbo)]
+```
+
+The largest attained ELBO selects **$S=`r best_S`$** on this single path.

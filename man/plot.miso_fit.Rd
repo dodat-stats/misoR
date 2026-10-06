@@ -30,8 +30,11 @@ expected loadings (counts for \code{\link[=miso_fit]{miso_fit()}}, per unit of \
 
 \item{factor_order}{Optional permutation of all fitted factor indices.}
 
-\item{sort_by}{Optional fitted factor index. Within each cluster, order bars
-by the loading fraction of that factor. Otherwise preserve observation order.}
+\item{sort_by}{NULL preserves observation order within each cluster. A fitted
+factor index sorts by increasing loading fraction of that factor.
+"dominant" selects each cluster's largest-mean loading fraction and sorts
+by decreasing fraction of that factor, even when normalize = FALSE.
+Factor ties use the original factor index; observation ties use input order.}
 
 \item{col}{Optional color (ELBO) or vector with one color per factor in the
 original factor order (loadings or graphs). For graphs, overrides \code{colors}.}

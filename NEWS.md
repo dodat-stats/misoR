@@ -1,5 +1,7 @@
 # misoR 0.2.0
 
+- Loading plots accept `sort_by = "dominant"` to order observations within each
+  motif by decreasing fraction of its largest-mean factor.
 - Bayesian mixture inference uses joint population posteriors for alpha and beta;
   the normalized dictionary F remains point-estimated.
 - New `warm_up_iters` control: 20 fixed-F Gauss-Seidel sweeps for fresh fits,

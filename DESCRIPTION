@@ -12,6 +12,7 @@ License: file LICENSE
 Encoding: UTF-8
 Depends: R (>= 4.1.0)
 Imports: Matrix, methods, stats, graphics, grDevices, utils
-Suggests: roxygen2, igraph
+Suggests: roxygen2, igraph, knitr, rmarkdown
+VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE)
 Config/roxygen2/version: 8.1.0

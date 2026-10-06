@@ -70,8 +70,11 @@ print.summary.miso_fit <- function(x,digits=4,...) {
 #'   [miso_fit_length()]). Used for loading plots only.
 #' @param cluster_order Optional permutation of occupied fitted cluster indices.
 #' @param factor_order Optional permutation of all fitted factor indices.
-#' @param sort_by Optional fitted factor index. Within each cluster, order bars
-#'   by the loading fraction of that factor. Otherwise preserve observation order.
+#' @param sort_by NULL preserves observation order within each cluster. A fitted
+#'   factor index sorts by increasing loading fraction of that factor.
+#'   "dominant" selects each cluster's largest-mean loading fraction and sorts
+#'   by decreasing fraction of that factor, even when normalize = FALSE.
+#'   Factor ties use the original factor index; observation ties use input order.
 #' @param col Optional color (ELBO) or vector with one color per factor in the
 #'   original factor order (loadings or graphs). For graphs, overrides `colors`.
 #' @param main Optional plot title.
@@ -118,14 +121,20 @@ plot.miso_fit <- function(x, type = c("elbo", "loadings", "subgraphs", "aggregat
              "cluster_order must permute the occupied cluster indices.")
   .miso_stop(length(factor_order) == K && setequal(factor_order, seq_len(K)),
              "factor_order must permute all factor indices.")
-  if (!is.null(sort_by)) {
-    .miso_stop(length(sort_by) == 1 && sort_by %in% seq_len(K),
-               "sort_by must be a fitted factor index.")
+  dominant = identical(sort_by, "dominant")
+  if (!is.null(sort_by) && !dominant) {
+    .miso_stop(is.numeric(sort_by) && length(sort_by) == 1 && sort_by %in% seq_len(K),
+               "sort_by must be NULL, 'dominant', or a fitted factor index.")
   }
   fractions = L / pmax(rowSums(L), .Machine$double.xmin)
   rows = unlist(lapply(cluster_order, function(s) {
     i = which(x$z_hat == s)
-    if (is.null(sort_by)) i else i[order(fractions[i, sort_by], i)]
+    if (is.null(sort_by)) return(i)
+    if (dominant) {
+      k = which.max(colMeans(fractions[i, , drop = FALSE]))
+      return(i[order(-fractions[i, k], i)])
+    }
+    i[order(fractions[i, sort_by], i)]
   }), use.names = FALSE)
   sizes = tabulate(match(x$z_hat, cluster_order), nbins = length(cluster_order))
   starts = c(1L, head(cumsum(sizes), -1L) + 1L)
