@@ -110,16 +110,16 @@
 
 ## Preserve the original S by D storage when there is no length multiplier.
 ## With document lengths, rates are N by S by D, just like posterior shapes.
-.miso_posterior_rates <- function(beta0, n = NULL) {
-  if (is.null(n)) return(beta0 + 1)
-  rates = array(rep(as.vector(beta0), each = length(n)),
-                c(length(n), nrow(beta0), ncol(beta0)))
+.miso_posterior_rates <- function(population_rate, n = NULL) {
+  if (is.null(n)) return(population_rate + 1)
+  rates = array(rep(as.vector(population_rate), each = length(n)),
+                c(length(n), nrow(population_rate), ncol(population_rate)))
   sweep(rates, 1, n, "+")
 }
 
-.miso_rate_matrix <- function(beta, s, N, D) {
-  if (length(dim(beta)) == 3L) return(matrix(beta[, s, ], N, D))
-  matrix(beta[s, ], N, D, byrow = TRUE)
+.miso_rate_matrix <- function(b, s, N, D) {
+  if (length(dim(b)) == 3L) return(matrix(b[, s, ], N, D))
+  matrix(b[s, ], N, D, byrow = TRUE)
 }
 
 .miso_row_sums <- function(Y) {
@@ -155,32 +155,6 @@
   .miso_stop(is.matrix(F) && is.numeric(F) && nrow(F) >= 1 && ncol(F) == M,
              "F must be a numeric K by M matrix with K >= 1.")
   .miso_stop(all(is.finite(F)) && all(F >= 0), "F must be finite and nonnegative.")
-}
-
-.miso_validate_inputs <- function(Y, F, gamma, alpha0, beta0,
-                                 omega, phi0) {
-  .miso_prepare_counts(Y)
-  .miso_stop(is.matrix(F) && ncol(F) == ncol(Y),
-             "F must be a K by M matrix with M = ncol(Y).")
-  .miso_stop(all(is.finite(F)) && all(F >= 0),
-             "F must be finite and nonnegative.")
-
-  dimensions = dim(gamma)
-  .miso_stop(length(dimensions) == 3 && dimensions[3] == nrow(F),
-             "gamma must be an S by D by K array with K = nrow(F).")
-  .miso_stop(all(dim(alpha0) == dimensions[1:2]) &&
-               all(dim(beta0) == dimensions[1:2]),
-             "alpha0 and beta0 must be S by D matrices.")
-  .miso_stop(all(is.finite(alpha0)) && all(alpha0 > 0) &&
-               all(is.finite(beta0)) && all(beta0 > 0),
-             "Gamma prior parameters must be finite and positive.")
-  .miso_stop(all(dim(omega) == c(nrow(Y), dimensions[1])) &&
-               all(is.finite(omega)) && all(omega >= 0),
-             "omega must be a nonnegative N by S matrix.")
-  .miso_stop(length(phi0) %in% c(1, dimensions[1]) &&
-               all(is.finite(phi0)) && all(phi0 > 0),
-             "phi0 must contain one positive value or one per motif.")
-  invisible(TRUE)
 }
 
 .miso_xi <- function(expected_log_lambda, expected_log_F, block,

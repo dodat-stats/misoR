@@ -10,7 +10,7 @@
 }
 
 .poisson_nmf_fit <- function(Y, K, max_iters = 200, tol = 1e-6,
-                            seed = 1, eps = 1e-10) {
+                            seed = 1, eps = 1e-10, F = NULL) {
   Y = .miso_prepare_counts(Y)
   sparse = .miso_is_sparse(Y)
   .miso_stop(K >= 1 && K == as.integer(K), "K must be a positive integer.")
@@ -18,7 +18,16 @@
   N = nrow(Y)
   M = ncol(Y)
   L = matrix(rexp(N * K), N, K)
-  F = .miso_normalize_rows(matrix(rexp(K * M), K, M), eps)
+  update_F = is.null(F)
+  F = if (update_F) {
+    .miso_normalize_rows(matrix(rexp(K * M), K, M), eps)
+  } else {
+    .miso_validate_dictionary(F, M)
+    .miso_stop(nrow(F) == K, "K must agree with nrow(F).")
+    .miso_stop(all(is.finite(rowSums(F))) && all(rowSums(F) > 0),
+               "Fixed F must have finite positive row sums.")
+    F / rowSums(F)
+  }
   objective = rep(NA_real_, max_iters)
   if (sparse) {
     rows = Y@i + 1L
@@ -39,17 +48,19 @@
       matrix(rowSums(F), N, K, byrow = TRUE)
     L = pmax(L, eps)
 
-    if (sparse) {
-      ratio@x = Y@x / pmax(.miso_nmf_observed_mean(L, F, rows, columns), eps)
-    } else {
-      ratio = Y / pmax(L %*% F, eps)
+    if (update_F) {
+      if (sparse) {
+        ratio@x = Y@x / pmax(.miso_nmf_observed_mean(L, F, rows, columns), eps)
+      } else {
+        ratio = Y / pmax(L %*% F, eps)
+      }
+      F = F * as.matrix(t(L) %*% ratio) /
+        matrix(colSums(L), K, M)
+      F = pmax(F, eps)
+      row_scale = rowSums(F)
+      F = F / row_scale
+      L = sweep(L, 2, row_scale, "*")
     }
-    F = F * as.matrix(t(L) %*% ratio) /
-      matrix(colSums(L), K, M)
-    F = pmax(F, eps)
-    row_scale = rowSums(F)
-    F = F / row_scale
-    L = sweep(L, 2, row_scale, "*")
 
     log_term = if (sparse) {
       sum(Y@x * log(pmax(.miso_nmf_observed_mean(L, F, rows, columns), eps)))

@@ -6,18 +6,18 @@ local({
   Y <- matrix(rpois(20 * 12, 1), 20, 12)
   F <- matrix(rexp(3 * 12), 3, 12)
   ps <- poisson_susie_fit(Y, F, D = 2, max_iters = 5, seed = 4)
-  fresh <- miso_init(Y, F, D = 2, susie_max_iters = 5, seed = 4,
+  fresh <- miso_init(Y, F, D = 2, method = "poisson_susie", susie_max_iters = 5, seed = 4,
                     phi0 = 0.2, keep_intermediates = TRUE)
   cached <- miso_init(Y, poisson_susie = ps, phi0 = 0.2)
-  fields <- c("F", "gamma", "alpha0", "beta0", "omega", "phi0", "support")
+  fields <- c("F", "gamma", "a", "b", "omega", "phi0", "support")
   close(fresh[fields], cached[fields])
   close(fresh$poisson_susie, ps)
   stopifnot(cached$settings$reused_poisson_susie)
-  fit <- miso_fit(Y, init = cached, max_iters = 4, tol = 0)
+  fit <- miso_fit(S = dim(cached$gamma)[1], warm_up_iters = 0L, Y, init = cached, max_iters = 4, tol = 0)
   close(fit$phi0, cached$phi0)
-  override <- miso_fit(Y, init = cached, phi0 = 0.3, max_iters = 1)
+  override <- miso_fit(tol = 0, S = dim(cached$gamma)[1], warm_up_iters = 0L, Y, init = cached, phi0 = 0.3, max_iters = 1)
   close(override$phi0, rep(0.3, ncol(fit$omega)))
-  sparse <- miso_fit(Matrix::Matrix(Y, sparse = TRUE), init = cached, max_iters = 4, tol = 0)
+  sparse <- miso_fit(S = dim(cached$gamma)[1], warm_up_iters = 0L, Matrix::Matrix(Y, sparse = TRUE), init = cached, max_iters = 4, tol = 0)
   close(predict(fit), predict(sparse))
   close(predict(fit), predict(fit, type = "loadings") %*% fit$F)
   rejects(miso_init(Y[-1, ], poisson_susie = ps))
@@ -31,7 +31,7 @@ local({
   for (j in seq_len(nrow(sm$slots))) {
     slot <- sm$slots[j, ]
     close(slot$probability, fit$gamma[slot$motif, slot$slot, slot$factor])
-    close(slot$prior_mean, fit$prior_mean[slot$motif, slot$slot])
+    close(slot$population_mean, fit$population_mean[slot$motif, slot$slot])
   }
   invisible(capture.output(print(sm)))
   path <- tempfile(fileext = ".pdf")
@@ -50,7 +50,8 @@ local({
   rejects(plot(fit, type = "loadings", factor_order = c(1, 1, 3)))
   rejects(plot(fit, type = "loadings", cluster_order = 0))
   rejects(plot(fit, type = "loadings", normalize = NA))
-  single <- miso_fit(matrix(0, 1, 1), F = matrix(1), D = 1, max_iters = 2)
+  single <- miso_fit(tol = 0, S = 1L, warm_up_iters = 0L, matrix(0, 1, 1), F = matrix(1), D = 1, max_iters = 2,
+    population_prior=list(alpha=c(shape=2,rate=2),beta=c(shape=2,rate=2)))
   plot(single)
   data <- plot(single, type = "loadings")
   stopifnot(identical(dim(data$loadings), c(1L, 1L)), nrow(summary(single)$slots) == 1)

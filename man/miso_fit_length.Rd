@@ -2,7 +2,7 @@
 % Please edit documentation in R/miso_length.R
 \name{miso_fit_length}
 \alias{miso_fit_length}
-\title{Fit MiSo with document-length-adjusted Poisson means}
+\title{Fit length-adjusted MiSO with Bayesian mixture parameters}
 \usage{
 miso_fit_length(
   Y,
@@ -12,12 +12,13 @@ miso_fit_length(
   K = NULL,
   n = NULL,
   phi0 = 0.1,
-  max_iters = 100,
+  population_prior = "row_totals",
+  quadrature_control = list(),
+  max_iters = 500,
   mixture_max_iters = 30,
-  tol = 1e-05,
+  tol = 1e-08,
   min_iters = 5,
   patience = 2,
-  update_prior = TRUE,
   update_gamma = TRUE,
   update_F = TRUE,
   block_size = 100,
@@ -25,113 +26,86 @@ miso_fit_length(
   verbose = FALSE,
   seed = 1,
   init_control = list(),
-  keep_initialization = FALSE
+  keep_initialization = FALSE,
+  S,
+  warm_up_iters = 20L
 )
 }
 \arguments{
-\item{Y}{A finite nonnegative numeric matrix (observations by features), dense
-or a sparse matrix from the Matrix package. Fractional values are allowed
-and are not rounded.}
+\item{Y}{Dense or sparse nonnegative N by M observations. Integer counts have
+a Poisson interpretation; fractional inputs use a generalized Poisson objective.}
 
-\item{F}{A nonnegative dictionary, factors by features. Rows are normalized
-internally. If omitted, use the cached dictionary or estimate one by NMF.}
+\item{F}{Optional K by M initial dictionary. Rows are normalized. With supplied
+init, F must match its dictionary if both are given.}
 
-\item{D}{Positive integer number of factor slots per motif. Inferred from
-\code{init$gamma} when an initialization is supplied.}
+\item{D, K, S}{Positive slot, factor, and motif counts. Inferred from init when
+supplied. K is required when estimating an initial dictionary. With S=NULL,
+automatic initialization retains its discovered supports, not an ELBO selection.}
 
-\item{init}{Optional initialization with \code{gamma}, \code{alpha0}, \code{beta0}, and
-optionally \code{omega}, \code{F}, and \code{phi0}, as in \code{\link[=miso_fit]{miso_fit()}}. Loading priors must
-be on the per-unit-n scale. Reuse \code{fit$initialization} from a length-adjusted
-fit with \code{keep_initialization = TRUE}; its stored \code{n} must match. Do not
-directly reuse the count-scale priors returned by \code{\link[=miso_init]{miso_init()}}.}
+\item{init}{Initialization from \code{\link[=miso_init]{miso_init()}}, a new-format fitted object, or
+a list with F and gamma (S by D by K). Optional omega is N by S; a and b must
+be supplied together. a is N by S by D; b is S by D for ordinary MiSO or
+N by S by D for length adjustment. Optional q_population contains joint
+posterior blocks in column-major (s,d) order. Prior incompatibility is an
+error; omit these blocks to initialize under a different prior. A fitted
+object continues inference on matching observations and feature order.}
 
-\item{K}{Number of dictionary factors. Required when estimating \code{F}.}
+\item{n}{Positive exposures. Defaults to rowSums(Y), requiring nonempty rows.
+Counts remain unnormalized. For observed row totals the Poisson model is
+a working likelihood, not the exact conditional sampling law of the totals.}
 
-\item{n}{Known positive document lengths, one per row of \code{Y}. Defaults to
-row totals over the supplied vocabulary. With this default, remove empty
-documents before fitting. Other positive lengths may be supplied explicitly;
-\code{rep(1, nrow(Y))} recovers the original likelihood and loading scale.}
+\item{phi0}{Positive Dirichlet prior scalar or S-vector; default 0.1. A supplied
+initialization's value is inherited when this argument is omitted.}
 
-\item{phi0}{Positive scalar or vector of Dirichlet prior parameters. A vector
-must have one entry per discovered motif.}
+\item{population_prior}{A list with alpha and beta, each a named shape/rate
+pair, or "row_totals" (default). NULL also calibrates from row totals.
+An initialization's prior is inherited when this argument is omitted.}
 
-\item{max_iters}{Maximum outer iterations.}
+\item{quadrature_control}{Named controls tol (1e-8), max_order (512), tail_drop
+(40), tail_expand (10). Refinement and tail-expansion discrepancies must
+both meet tolerance; these are numerical estimates, not certified error bounds.}
 
-\item{mixture_max_iters}{Maximum responsibility/Dirichlet updates per outer
-iteration; these stop at relative Dirichlet-parameter change below 1e-10.}
+\item{max_iters}{Maximum main Jacobi iterations, excluding warm-up (default 500).
+With tol > 0, reaching this limit without convergence raises a warning.}
 
-\item{tol}{Relative ELBO-change tolerance. Zero disables early stopping.}
+\item{mixture_max_iters}{Positive inner membership iteration limit.}
 
-\item{min_iters}{Minimum outer iterations before convergence can be counted.}
+\item{tol}{Relative ELBO change tolerance; zero disables early stopping.}
 
-\item{patience}{Number of consecutive small ELBO changes required to stop.}
+\item{min_iters, patience}{Minimum iterations and consecutive small changes.}
 
-\item{update_prior, update_gamma, update_F}{Whether to update loading priors,
-factor-selection probabilities, and the dictionary, respectively.}
+\item{update_gamma, update_F}{Whether to update factor selections and dictionary.}
 
-\item{block_size}{Number of features in each allocation block.}
+\item{block_size}{Number of features per allocation block.}
 
-\item{eps}{Positive numerical floor.}
+\item{eps}{Positive numerical floor for probabilities and logarithms.}
 
-\item{verbose}{Print iteration diagnostics.}
+\item{verbose}{Print iteration progress.}
 
-\item{seed}{Random seed for initialization.}
+\item{seed}{Initialization seed.}
 
-\item{init_control}{Named list of initialization controls: \code{tau},
-\code{min_fraction}, \code{gamma_floor}, \code{susie_max_iters}, \code{susie_tol}, and
-\code{nmf_max_iters}. The last applies only when F is absent. Must be empty
-when supplying \code{init}.}
+\item{init_control}{Named controls passed to \code{\link[=miso_init]{miso_init()}}, used only without init.}
 
-\item{keep_initialization}{Retain starting parameters as \code{initialization}.}
+\item{keep_initialization}{Store the complete starting state in the fit.}
+
+\item{warm_up_iters}{Nonnegative integer number of initial fixed-F Gauss-Seidel
+sweeps (default 20). If omitted when init is a fitted miso_fit object, use zero.
+An explicit value overrides this resume behavior. The full variational state
+passes to Jacobi unchanged. With update_F=FALSE, F stays fixed in both stages.
+tol=0 requests a fixed number of iterations and suppresses convergence warnings.}
 }
 \value{
-A \code{miso_fit} object with the fields described in \code{\link[=miso_fit]{miso_fit()}}, except
-\code{beta} is N by S by D. Also includes \code{n} and \code{elbo_constant}, the omitted
-data-only term \code{sum(rowSums(Y) * log(n)) - sum(lgamma(Y + 1))}. Add this
-constant to \code{elbo} or \code{final_elbo} for the full working-likelihood bound.
-\code{predict(fit, "loadings")} returns per-unit-n loadings and \code{predict(fit)}
-returns mean counts, multiplying the reconstruction by \code{n} row-wise.
-Normalizing posterior mean loadings gives a descriptive composition, not
-the exact posterior mean of the normalized latent loadings.
+A version-2 miso_fit object as in \code{\link[=miso_fit]{miso_fit()}}, with n and per-exposure
+loadings. predict(fit) multiplies L times F by n. ELBO includes the full
+data-only constant; do not add elbo_constant a second time. Normalized posterior
+mean loadings are descriptive fractions, not E(L/sum(L)).
 }
 \description{
-Fit the Poisson working likelihood \code{Y[i,j] ~ Poisson(n[i] * (L \%*\% F)[i,j])}
-with the same sparse motif structure as \code{\link[=miso_fit]{miso_fit()}}. Counts remain on their
-original scale. Dictionary rows sum to one; loadings describe contributions
-per unit of document length and are not constrained to sum to one. Both
-fitters use the same SuSiE, factor, and mixture steps, with one update of
-factor selections and the dictionary per outer iteration. Nonnegative
-fractional inputs are accepted and optimize the generalized Poisson objective.
+Fit length-adjusted MiSO with Bayesian mixture parameters
 }
 \details{
-For integer counts, when \code{n} is the observed row total, this is a working likelihood, not the
-exact sampling law conditional on that total. Write \code{r[i] = sum(L[i,])}
-and \code{p[i,] = (L \%*\% F)[i,] / r[i]}. The likelihood equals a multinomial
-likelihood for \code{p[i,]} times \verb{Poisson(n[i]; n[i] * r[i])}. It therefore
-encourages, but does not enforce, a total loading of one. Loading priors
-mean that the Bayesian fit is not generally identical to a multinomial fit.
-
-Automatic initialization estimates the usual Poisson NMF dictionary if
-necessary, fits count-scale Poisson SuSiE, and rescales each row's Gamma
-posterior from loading \code{a} to \code{a / n[i]} by multiplying its rate by \code{n[i]}.
-Motif discovery and pooled prior estimation then use these rescaled moments.
-This reuses count-scale SuSiE for initialization only; subsequent MiSo
-iterations optimize the length-adjusted objective.
-
-Each loading posterior has rate \code{beta0[s,d] + n[i]} at its coordinate update.
-Subsequent empirical-Bayes updates hold that posterior fixed. Consequently,
-returned \code{beta} need not equal returned \code{beta0 + n}, since the latter prior
-may have been updated later in the same iteration.
-}
-\examples{
-Y <- matrix(c(12, 3, 2, 1, 3, 15, 2, 4, 6, 6, 5, 3), 3, 4, byrow = TRUE)
-F <- rbind(c(5, 1, 1, 1), c(1, 5, 1, 1))
-fit <- miso_fit_length(Y, F, D = 2, max_iters = 5,
-                       init_control = list(susie_max_iters = 5))
-L <- predict(fit, "loadings")
-theta <- L / rowSums(L)
-fitted_counts <- predict(fit)
-}
-\seealso{
-\code{\link[=miso_fit]{miso_fit()}}, \code{\link[=predict.miso_fit]{predict.miso_fit()}}, \code{\link[=plot.miso_fit]{plot.miso_fit()}}
+Local rates b are N by S by D and equal E(beta)+n at their coordinate
+update. Subsequent population updates hold them fixed. Unit exposures recover
+ordinary MiSO with matched initialization and priors. Input NMF loadings passed
+to miso_init remain on the count scale and are divided by n there.
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/miso.R
 \name{miso_fit}
 \alias{miso_fit}
-\title{Fit a mixture of sparse Poisson factor models}
+\title{Fit MiSO with Bayesian mixture parameters and an estimated dictionary}
 \usage{
 miso_fit(
   Y,
@@ -11,12 +11,13 @@ miso_fit(
   init = NULL,
   K = NULL,
   phi0 = 0.1,
-  max_iters = 100,
+  population_prior = "row_totals",
+  quadrature_control = list(),
+  max_iters = 500,
   mixture_max_iters = 30,
-  tol = 1e-05,
+  tol = 1e-08,
   min_iters = 5,
   patience = 2,
-  update_prior = TRUE,
   update_gamma = TRUE,
   update_F = TRUE,
   block_size = 100,
@@ -24,91 +25,89 @@ miso_fit(
   verbose = FALSE,
   seed = 1,
   init_control = list(),
-  keep_initialization = FALSE
+  keep_initialization = FALSE,
+  S,
+  warm_up_iters = 20L
 )
 }
 \arguments{
-\item{Y}{A finite nonnegative numeric matrix (observations by features), dense
-or a sparse matrix from the Matrix package. Fractional values are allowed
-and are not rounded.}
+\item{Y}{Dense or sparse nonnegative N by M observations. Integer counts have
+a Poisson interpretation; fractional inputs use a generalized Poisson objective.}
 
-\item{F}{A nonnegative dictionary, factors by features. Rows are normalized
-internally. If omitted, use the cached dictionary or estimate one by NMF.}
+\item{F}{Optional K by M initial dictionary. Rows are normalized. With supplied
+init, F must match its dictionary if both are given.}
 
-\item{D}{Positive integer number of factor slots per motif. May be omitted
-when \code{poisson_susie} is supplied.}
+\item{D, K, S}{Positive slot, factor, and motif counts. Inferred from init when
+supplied. K is required when estimating an initial dictionary. With S=NULL,
+automatic initialization retains its discovered supports, not an ELBO selection.}
 
-\item{init}{Optional initialization list from \code{\link[=miso_init]{miso_init()}}, or a list with
-\code{gamma} (S by D by K), \code{alpha0} and \code{beta0} (S by D), and optionally \code{omega}
-(N by S), \code{F}, and \code{phi0}. If \code{phi0} is omitted in the call, use \code{init$phi0}
-when available. D is inferred from supplied parameters when omitted.}
+\item{init}{Initialization from \code{\link[=miso_init]{miso_init()}}, a new-format fitted object, or
+a list with F and gamma (S by D by K). Optional omega is N by S; a and b must
+be supplied together. a is N by S by D; b is S by D for ordinary MiSO or
+N by S by D for length adjustment. Optional q_population contains joint
+posterior blocks in column-major (s,d) order. Prior incompatibility is an
+error; omit these blocks to initialize under a different prior. A fitted
+object continues inference on matching observations and feature order.}
 
-\item{K}{Number of dictionary factors. Required when estimating \code{F}.}
+\item{phi0}{Positive Dirichlet prior scalar or S-vector; default 0.1. A supplied
+initialization's value is inherited when this argument is omitted.}
 
-\item{phi0}{Positive scalar or vector of Dirichlet prior parameters. A vector
-must have one entry per discovered motif.}
+\item{population_prior}{A list with alpha and beta, each a named shape/rate
+pair, or "row_totals" (default). NULL also calibrates from row totals.
+An initialization's prior is inherited when this argument is omitted.}
 
-\item{max_iters}{Maximum outer iterations.}
+\item{quadrature_control}{Named controls tol (1e-8), max_order (512), tail_drop
+(40), tail_expand (10). Refinement and tail-expansion discrepancies must
+both meet tolerance; these are numerical estimates, not certified error bounds.}
 
-\item{mixture_max_iters}{Maximum responsibility/Dirichlet updates per outer
-iteration; these stop at relative Dirichlet-parameter change below 1e-10.}
+\item{max_iters}{Maximum main Jacobi iterations, excluding warm-up (default 500).
+With tol > 0, reaching this limit without convergence raises a warning.}
 
-\item{tol}{Relative ELBO-change tolerance. Zero disables early stopping.}
+\item{mixture_max_iters}{Positive inner membership iteration limit.}
 
-\item{min_iters}{Minimum outer iterations before convergence can be counted.}
+\item{tol}{Relative ELBO change tolerance; zero disables early stopping.}
 
-\item{patience}{Number of consecutive small ELBO changes required to stop.}
+\item{min_iters, patience}{Minimum iterations and consecutive small changes.}
 
-\item{update_prior, update_gamma, update_F}{Whether to update loading priors,
-factor-selection probabilities, and the dictionary, respectively.}
+\item{update_gamma, update_F}{Whether to update factor selections and dictionary.}
 
-\item{block_size}{Number of features in each allocation block.}
+\item{block_size}{Number of features per allocation block.}
 
-\item{eps}{Positive numerical floor.}
+\item{eps}{Positive numerical floor for probabilities and logarithms.}
 
-\item{verbose}{Print iteration diagnostics.}
+\item{verbose}{Print iteration progress.}
 
-\item{seed}{Random seed for initialization.}
+\item{seed}{Initialization seed.}
 
-\item{init_control}{Named list of initialization controls: \code{tau},
-\code{min_fraction}, \code{gamma_floor}, \code{susie_max_iters}, \code{susie_tol}, and
-\code{nmf_max_iters}. The last applies only when F is absent. Must be empty
-when supplying \code{init}.}
+\item{init_control}{Named controls passed to \code{\link[=miso_init]{miso_init()}}, used only without init.}
 
-\item{keep_initialization}{Retain starting parameters as \code{initialization}.}
+\item{keep_initialization}{Store the complete starting state in the fit.}
+
+\item{warm_up_iters}{Nonnegative integer number of initial fixed-F Gauss-Seidel
+sweeps (default 20). If omitted when init is a fitted miso_fit object, use zero.
+An explicit value overrides this resume behavior. The full variational state
+passes to Jacobi unchanged. With update_F=FALSE, F stays fixed in both stages.
+tol=0 requests a fixed number of iterations and suppresses convergence warnings.}
 }
 \value{
-A \code{miso_fit} list containing \code{F} (K by M), \code{gamma} (S by D by K),
-\code{alpha} (N by S by D), \code{beta}, \code{alpha0}, \code{beta0}, and \code{prior_mean}
-(each S by D), \code{omega} (N by S), \code{phi0}, \code{phi}, \code{pi}, and \code{allocation_mass}
-(each length S), and \code{z_hat} (length N). Also contains \code{component_elbo}
-(N by S), \code{elbo}, \code{final_elbo}, \code{converged}, \code{n_iter}, and \code{call}.
-The returned state is the last completed iteration, with
-\code{final_elbo == tail(elbo, 1)}. F rows sum to one, so expected factor
-loadings are on the count scale. \code{pi} is the posterior mean mixture weight;
-\code{allocation_mass} is the mean responsibility across observations.
+A version-2 miso_fit object. Local variational parameters are a and b;
+alpha_mean and beta_mean are population posterior means. q_population holds
+joint moments, KL, normalizers, sufficient statistics and numerical diagnostics.
+population_mean is E(alpha/beta), not the ratio of means. Also contains F,
+gamma, omega, phi, phi0, pi, allocation_mass, z_hat, component_elbo, elbo,
+final_elbo, elbo_terms, elbo_constant, converged, n_iter, quadrature and
+quadrature_history. ELBO includes the data-only Poisson constant for both
+models. The final state is the last full coordinate sweep; coordinates need
+not be mutually optimal until convergence. Priors and calibration are retained.
 }
 \description{
-Each outer iteration has three steps: SuSiE updates the loading posterior,
-factor selections, and loading priors; the factor step updates the dictionary
-once; the mixture step refines responsibilities and mixture proportions,
-then evaluates the ELBO. Auxiliary allocations use one Jacobi feature-block
-pass and are never retained. A second pass evaluates component bounds.
-Updates are undamped. Finite nonnegative real-valued inputs are supported
-without rounding; for fractional inputs, the same generalized Poisson
-objective is optimized.
+Joint population blocks q(alpha_sd,beta_sd) are updated by one-dimensional
+quadrature. Local Gamma factors use shape a and rate b. The dictionary F
+remains point-estimated by variational EM. All Gamma parameters use shape/rate.
 }
 \examples{
-set.seed(1)
-Y <- matrix(rpois(60, 2), 10, 6)
-F <- rbind(c(4, 4, 1, 1, 1, 1), c(1, 1, 1, 1, 4, 4))
-fit <- miso_fit(Y, F, D = 2, max_iters = 5,
-                init_control = list(susie_max_iters = 5))
-print(fit)
-L <- predict(fit, type = "loadings")
-stopifnot(all(dim(L) == c(10, 2)))
-}
-\seealso{
-\code{\link[=miso_init]{miso_init()}}, \code{\link[=summary.miso_fit]{summary.miso_fit()}}, \code{\link[=plot.miso_fit]{plot.miso_fit()}},
-\code{\link[=predict.miso_fit]{predict.miso_fit()}}
+Y <- matrix(c(5,1,4,2,1,5,2,4),4,2,byrow=TRUE)
+fit <- miso_fit(Y,F=diag(2),D=1,S=2,max_iters=3,tol=0,
+                init_control=list(nmf_max_iters=5))
+predict(fit, "loadings")
 }

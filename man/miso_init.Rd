@@ -19,66 +19,109 @@ miso_init(
   nmf_max_iters = 200,
   seed = 1,
   eps = 1e-12,
-  keep_intermediates = FALSE
+  keep_intermediates = FALSE,
+  S = NULL,
+  L = NULL,
+  method = c("nmf", "poisson_susie"),
+  n = NULL,
+  unsupported_fraction = 0.01
 )
 }
 \arguments{
 \item{Y}{A finite nonnegative numeric matrix (observations by features), dense
-or a sparse matrix from the Matrix package. Fractional values are allowed
-and are not rounded.}
+or a sparse matrix from the Matrix package. Fractional values are allowed.}
 
-\item{F}{A nonnegative dictionary, factors by features. Rows are normalized
-internally. If omitted, use the cached dictionary or estimate one by NMF.}
+\item{F}{A nonnegative dictionary, K by M. Rows are normalized internally;
+the NMF method requires each row to have positive total mass.
+If omitted, estimate it by Poisson NMF (or use the cached SuSiE dictionary).
+With method "nmf", supplying F alone fits loadings while holding F fixed.}
 
 \item{D}{Positive integer number of factor slots per motif. May be omitted
 when \code{poisson_susie} is supplied.}
 
-\item{K}{Number of dictionary factors. Required when estimating \code{F}.}
+\item{K}{Number of factors. Required when estimating F.}
 
-\item{poisson_susie}{Optional result of \code{\link[=poisson_susie_fit]{poisson_susie_fit()}} for the same
-observations, in the same row order, and the same dictionary. Counts are
-not retained in that result, so the caller must ensure row correspondence.}
+\item{poisson_susie}{Optional cached result of \code{\link[=poisson_susie_fit]{poisson_susie_fit()}} on the
+same observations and dictionary. Selects the legacy method when \code{method}
+is omitted. With n supplied, cached posteriors must be on the count scale.}
 
 \item{phi0}{Positive scalar or vector of Dirichlet prior parameters. A vector
-must have one entry per discovered motif.}
+must have one entry per final motif.}
 
-\item{tau}{Cumulative expected-loading fraction defining each initial support,
-in \verb{(0, 1]}.}
+\item{tau}{Cumulative loading fraction defining each support, in \verb{(0, 1]}.}
 
-\item{min_fraction}{Minimum initial motif fraction, in \verb{(0, 1]}.}
+\item{min_fraction}{Minimum motif fraction for the legacy SuSiE method only.
+The direct NMF method does not consolidate rare patterns automatically.}
 
-\item{gamma_floor}{Initial factor-selection probability smoothing, in \verb{[0, 1)}.
-This controls initialization, not update damping.}
+\item{gamma_floor}{Initial factor-selection probability smoothing, in \verb{[0, 1)}.}
 
-\item{susie_max_iters, susie_tol}{Poisson-SuSiE iteration limit and tolerance;
-used only when cached results are absent.}
+\item{susie_max_iters, susie_tol}{Iteration limit and tolerance for the legacy
+SuSiE method only, when cached results are absent.}
 
-\item{nmf_max_iters}{Iteration limit for dictionary initialization.}
+\item{nmf_max_iters}{Iteration limit for fitting NMF or fixed-F loadings.}
 
-\item{seed}{Random seed for initialization.}
+\item{seed}{Random seed for NMF and reproducible random group splitting.}
 
 \item{eps}{Positive numerical floor.}
 
-\item{keep_intermediates}{Retain the row-wise posterior summaries as
-\code{poisson_susie} in the returned list. Auxiliary allocation arrays are omitted.}
+\item{keep_intermediates}{Retain row-wise posteriors for the legacy method.}
+
+\item{S}{Target number of initial motifs for the NMF method, or NULL to keep
+all S0 distinct supports. Must be between 1 and nrow(Y). Smaller targets
+merge groups by largest cosine similarity of their mean loading vectors;
+larger targets randomly bisect the largest group until S is reached.}
+
+\item{L}{Optional N by K NMF loadings, supplied together with F, on the count
+scale so that L times F approximates Y. Normalizing F rescales L to preserve
+their product. Supplying both skips NMF fitting. NMF method only.}
+
+\item{method}{Initialization method: "nmf" (default) or "poisson_susie".}
+
+\item{n}{Optional positive exposures, one per observation. NMF loadings or
+SuSiE posterior moments are divided by n before grouping and prior fitting.
+The returned initialization is then for \code{\link[=miso_fit_length]{miso_fit_length()}}, with matching n.}
+
+\item{unsupported_fraction}{For NMF initialization, combined prior mean of
+unsupported slots as a fraction of the group's mean total loading (default
+0.01). Each such slot has shape 1 and an equal share, floored at eps.}
 }
 \value{
-A list accepted by \code{miso_fit(init = ...)}: \code{F} (K by M), \code{gamma}
-(S by D by K), \code{alpha0} and \code{beta0} (S by D), \code{omega} (N by S), \code{phi0},
-and \code{phi}. Also includes \code{S}, \code{cluster}, \code{pattern}, \code{support}, \code{anchors},
-\code{expected_loading}, \code{slot_permutation}, \code{settings}, and \code{call}.
+A list accepted by \code{miso_fit(init = ...)}, or \code{miso_fit_length} when n
+is supplied: F, gamma (S by D by K), a (N by S by D), b, omega
+(N by S), phi0, phi, S, cluster, pattern, support, anchors, expected_loading,
+settings and call. b is S by D or N by S by D with exposures.
+population_seed records initialization-only Gamma shape/rate estimates,
+not a prior specification or a population posterior. NMF initialization also
+returns S0, initial_cluster,
+centers and merge/split history. The legacy method returns slot_permutation.
 }
 \description{
-Estimate a dictionary if needed, fit Poisson SuSiE independently to each
-observation, discover motif supports, and initialize the mixture parameters.
-Supply cached Poisson-SuSiE results to change support cutoffs without refitting
-the observation-level models.
+By default, initialize directly from Poisson NMF loadings: truncate each
+loading profile, group identical supports, and optionally merge or split
+groups to obtain S motifs. The earlier Poisson-SuSiE initializer remains
+available with \code{method = "poisson_susie"} or cached \code{poisson_susie} results.
+}
+\details{
+Supports use the shortest decreasing-loading prefix reaching tau, capped at
+D. Ties use factor index. A zero-loading row has empty support. On merging,
+centers are weighted by group size; the D largest center coordinates in the
+union of original observation supports determine the new support. Full means
+determine cosine similarity. Two zero centers have similarity 1; a zero and
+a nonzero center have similarity 0. Pair ties are deterministic.
+
+Splits randomly partition the largest group into floor(size/2) and
+ceiling(size/2) observations. Groups with identical supports remain distinct.
+Supported slots use Gamma maximum-likelihood moment equations on loadings
+floored at eps, with shapes bounded between 0.001 and 10000, including singleton
+and constant groups. Gamma parameters are shape and rate. Unsupported slots
+have uniform factor-selection probabilities and small positive prior means.
+This is initialization only, not ARD thresholding.
 }
 \examples{
 set.seed(1)
 Y <- matrix(rpois(60, 2), 10, 6)
-F <- rbind(c(4, 4, 1, 1, 1, 1), c(1, 1, 1, 1, 4, 4))
-ps <- poisson_susie_fit(Y, F, D = 2, max_iters = 5)
-initial <- miso_init(Y, poisson_susie = ps, tau = 0.9)
-fit <- miso_fit(Y, init = initial, max_iters = 5)
+initial <- miso_init(Y, K = 3, D = 2, S = 2, nmf_max_iters = 10)
+fit <- miso_fit(Y, init = initial, S = 2, max_iters = 5, tol = 0)
+# For an existing NMF fit, supply both L (N by K) and F (K by M).
+# initial <- miso_init(Y, L = L, F = F, D = 2, S = 3)
 }

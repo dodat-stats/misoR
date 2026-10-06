@@ -3,33 +3,28 @@
 \name{summary.miso_fit}
 \alias{summary.miso_fit}
 \alias{print.summary.miso_fit}
-\title{Summarize a MiSo fit}
+\title{Summarize a MiSO fit}
 \usage{
 \method{summary}{miso_fit}(object, ...)
 
 \method{print}{summary.miso_fit}(x, digits = 4, ...)
 }
 \arguments{
-\item{object}{A fitted \code{miso_fit} object.}
+\item{object}{A miso_fit object in format version 2. Convert legacy objects
+explicitly with \code{\link[=miso_convert_fit]{miso_convert_fit()}}.}
 
-\item{...}{Additional arguments; currently unused.}
+\item{...}{Reserved.}
 
-\item{x}{A summary returned by \code{summary()}.}
+\item{x}{A summary object.}
 
-\item{digits}{Number of significant digits to print.}
+\item{digits}{Display precision.}
 }
 \value{
-A \code{summary.miso_fit} list with dimensions, convergence diagnostics,
-a \code{motifs} table, and a \code{slots} table. \code{motifs} contains posterior mixture
-weights (\code{pi}), mean responsibilities (\code{allocation_mass}), hard-assignment
-sizes, and unordered MAP supports. \code{slots} contains the most probable factor,
-its selection probability, and the loading prior shape, rate, and mean.
+Dimensions, convergence, motif and slot summaries, and worst quadrature
+discrepancies. alpha_mean/beta_mean are posterior means; their SDs come from
+the joint population block. population_mean is E(alpha/beta). Converted legacy
+fits have NA SDs and no population posterior until refitted.
 }
 \description{
-Summarize a MiSo fit
-}
-\examples{
-Y <- matrix(c(5, 1, 4, 2, 1, 5, 2, 4), 4, 2, byrow = TRUE)
-fit <- miso_fit(Y, F = diag(2), D = 1, max_iters = 5)
-summary(fit)
+Summarize a MiSO fit
 }

@@ -2,11 +2,11 @@
 % Please edit documentation in R/methods.R
 \name{plot.miso_fit}
 \alias{plot.miso_fit}
-\title{Plot ELBO convergence or learned loadings}
+\title{Plot ELBO convergence, learned loadings, or factor graphs}
 \usage{
 \method{plot}{miso_fit}(
   x,
-  type = c("elbo", "loadings"),
+  type = c("elbo", "loadings", "subgraphs", "aggregate"),
   normalize = TRUE,
   cluster_order = NULL,
   factor_order = NULL,
@@ -19,7 +19,8 @@
 \arguments{
 \item{x}{A fitted \code{miso_fit} object.}
 
-\item{type}{Either \code{"elbo"} or \code{"loadings"}.}
+\item{type}{\code{"elbo"}, \code{"loadings"}, \code{"subgraphs"}, or \code{"aggregate"}.
+Graph types delegate to \code{\link[=plot_miso_graphs]{plot_miso_graphs()}} and accept its options via \code{...}.}
 
 \item{normalize}{Show within-observation fractions rather than absolute
 expected loadings (counts for \code{\link[=miso_fit]{miso_fit()}}, per unit of \code{n} for
@@ -33,17 +34,17 @@ expected loadings (counts for \code{\link[=miso_fit]{miso_fit()}}, per unit of \
 by the loading fraction of that factor. Otherwise preserve observation order.}
 
 \item{col}{Optional color (ELBO) or vector with one color per factor in the
-original factor order (loadings).}
+original factor order (loadings or graphs). For graphs, overrides \code{colors}.}
 
 \item{main}{Optional plot title.}
 
-\item{...}{Additional graphical arguments to \code{plot()} or \code{barplot()}.}
+\item{...}{Additional arguments to \code{plot()}, \code{barplot()}, or \code{\link[=plot_miso_graphs]{plot_miso_graphs()}}.}
 }
 \value{
 Invisibly, for loading plots, a list containing the N by K posterior
 mean \code{loadings} in original order, displayed \code{values}, \code{observation_order},
 \code{cluster_order}, \code{factor_order}, and \code{bar_midpoints}. For ELBO plots, returns
-the fitted object invisibly.
+the fitted object invisibly. Graph plots return the \code{\link[=miso_fit_graphs]{miso_fit_graphs()}} summary.
 }
 \description{
 Loading bars use posterior means averaged over mixture uncertainty.
@@ -52,7 +53,7 @@ Empty hard-assignment clusters are omitted; fitted components are not merged.
 }
 \examples{
 Y <- matrix(c(5, 1, 4, 2, 1, 5, 2, 4), 4, 2, byrow = TRUE)
-fit <- miso_fit(Y, F = diag(2), D = 1, max_iters = 5)
+fit <- miso_fit(Y, F = diag(2), D = 1, S = 2, max_iters = 5, tol = 0)
 plot(fit)
 plot(fit, type = "loadings")
 }

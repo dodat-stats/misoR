@@ -182,17 +182,17 @@
     permutation[i, ] = c(anchored_slots, remaining_slots)
   }
 
-  alpha0 = beta0 = matrix(0, S, D)
+  shape_seed = rate_seed = matrix(0, S, D)
   for (s in seq_len(S)) {
     members = which(cluster == s)
     for (d in seq_len(D)) {
       aligned = cbind(members, permutation[members, d])
       mean_lambda = mean(posterior_mean[aligned])
       mean_log_lambda = mean(posterior_mean_log[aligned])
-      alpha0[s, d] = .miso_gamma_shape_from_moments(
+      shape_seed[s, d] = .miso_gamma_shape_from_moments(
         mean_lambda, mean_log_lambda
       )
-      beta0[s, d] = alpha0[s, d] / pmax(mean_lambda, eps)
+      rate_seed[s, d] = shape_seed[s, d] / pmax(mean_lambda, eps)
     }
   }
 
@@ -201,8 +201,8 @@
     omega = omega,
     phi = phi,
     gamma = gamma,
-    alpha0 = alpha0,
-    beta0 = beta0,
+    shape_seed = shape_seed,
+    rate_seed = rate_seed,
     cluster = cluster,
     pattern = pattern,
     support = support,
